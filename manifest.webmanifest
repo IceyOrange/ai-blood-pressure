@@ -1,0 +1,19 @@
+{
+  "name": "脉安 · AI 血压管家",
+  "short_name": "脉安",
+  "description": "记录血压、心率、饮食和睡眠，并获得个性化健康指导。",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f5f7fb",
+  "theme_color": "#f5f7fb",
+  "lang": "zh-CN",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "./assets/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
