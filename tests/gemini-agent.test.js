@@ -191,6 +191,8 @@ test('extractGeminiText rejects incomplete and empty output', () => {
 
 test('chat handler completes the Gemini planner and answer flow', async () => {
   const originalGeminiKey = process.env.GEMINI_API_KEY;
+  const originalGeminiModel = process.env.GEMINI_MODEL;
+  const originalPlannerModel = process.env.GEMINI_PLANNER_MODEL;
   const originalSiliconFlowKey = process.env.SILICONFLOW_API_KEY;
   const originalFetch = global.fetch;
   const fetchCalls = [];
@@ -215,6 +217,8 @@ test('chat handler completes the Gemini planner and answer flow', async () => {
 
   try {
     process.env.GEMINI_API_KEY = 'test-gemini-key';
+    delete process.env.GEMINI_MODEL;
+    delete process.env.GEMINI_PLANNER_MODEL;
     delete process.env.SILICONFLOW_API_KEY;
     global.fetch = async (url, options) => {
       fetchCalls.push({ url, options });
@@ -240,13 +244,15 @@ test('chat handler completes the Gemini planner and answer flow', async () => {
     assert.equal(response.statusCode, 200);
     assert.equal(response.body.mode, 'gemini-agent');
     assert.equal(response.body.meta.plannerModel, 'gemini-3.5-flash-lite');
-    assert.equal(response.body.meta.model, 'gemini-3.7-flash');
+    assert.equal(response.body.meta.model, 'gemini-2.5-flash');
     assert.equal(response.body.meta.validation.passed, true);
     assert.equal(fetchCalls.length, 2);
     assert.ok(fetchCalls.every((call) => call.url.endsWith('/v1beta/interactions')));
     assert.ok(fetchCalls.every((call) => call.options.headers['x-goog-api-key'] === 'test-gemini-key'));
   } finally {
     restoreEnvironment('GEMINI_API_KEY', originalGeminiKey);
+    restoreEnvironment('GEMINI_MODEL', originalGeminiModel);
+    restoreEnvironment('GEMINI_PLANNER_MODEL', originalPlannerModel);
     restoreEnvironment('SILICONFLOW_API_KEY', originalSiliconFlowKey);
     global.fetch = originalFetch;
   }
@@ -280,10 +286,12 @@ test('chat handler reports Gemini configuration without calling upstream', async
 
 test('chat handler returns safe Gemini diagnostics for upstream failures', async () => {
   const originalGeminiKey = process.env.GEMINI_API_KEY;
+  const originalGeminiModel = process.env.GEMINI_MODEL;
   const originalFetch = global.fetch;
   let callCount = 0;
   try {
     process.env.GEMINI_API_KEY = 'test-gemini-key';
+    delete process.env.GEMINI_MODEL;
     global.fetch = async () => {
       callCount += 1;
       if (callCount === 1) {
@@ -311,6 +319,7 @@ test('chat handler returns safe Gemini diagnostics for upstream failures', async
     });
   } finally {
     restoreEnvironment('GEMINI_API_KEY', originalGeminiKey);
+    restoreEnvironment('GEMINI_MODEL', originalGeminiModel);
     global.fetch = originalFetch;
   }
 });
