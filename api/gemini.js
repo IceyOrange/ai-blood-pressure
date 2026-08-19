@@ -4,6 +4,14 @@ function createAgentError(message, code) {
   return error;
 }
 
+function sanitizeUpstreamMessage(value) {
+  return String(value || '')
+    .replace(/AIza[0-9A-Za-z_-]{20,}/g, '[redacted]')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 240);
+}
+
 function buildGeminiRequest({ model, messages, schema, temperature = 0.15, maxOutputTokens = 1200, thinkingLevel = 'low' }) {
   const systemInstruction = messages
     .filter((message) => message.role === 'system')
@@ -87,7 +95,11 @@ async function callGemini({
         : upstream.status === 429
           ? 'AI_RATE_LIMITED'
           : 'AI_UPSTREAM_FAILED';
-      throw createAgentError(`Gemini request failed with status ${upstream.status}`, code);
+      const upstreamError = createAgentError(`Gemini request failed with status ${upstream.status}`, code);
+      upstreamError.upstreamStatus = upstream.status;
+      upstreamError.upstreamCode = String(payload?.error?.status || '').slice(0, 80);
+      upstreamError.upstreamMessage = sanitizeUpstreamMessage(payload?.error?.message);
+      throw upstreamError;
     }
     return extractGeminiText(payload);
   } catch (error) {

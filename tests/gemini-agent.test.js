@@ -146,6 +146,23 @@ test('callGemini maps Google API key HTTP 400 to AI_AUTH_FAILED', async () => {
   );
 });
 
+test('callGemini preserves safe Gemini upstream diagnostics', async () => {
+  await assert.rejects(
+    callGemini(geminiOptions({
+      fetchImpl: async () => mockHttpResponse(404, {
+        error: { status: 'NOT_FOUND', message: 'Requested model was not found.' }
+      })
+    })),
+    (error) => {
+      assert.equal(error.code, 'AI_UPSTREAM_FAILED');
+      assert.equal(error.upstreamStatus, 404);
+      assert.equal(error.upstreamCode, 'NOT_FOUND');
+      assert.equal(error.upstreamMessage, 'Requested model was not found.');
+      return true;
+    }
+  );
+});
+
 test('callGemini maps an aborted request to AI_TIMEOUT', async () => {
   const fetchImpl = async (url, options) => new Promise((resolve, reject) => {
     options.signal.addEventListener('abort', () => {
@@ -257,6 +274,43 @@ test('chat handler reports Gemini configuration without calling upstream', async
   } finally {
     restoreEnvironment('GEMINI_API_KEY', originalGeminiKey);
     restoreEnvironment('SILICONFLOW_API_KEY', originalSiliconFlowKey);
+    global.fetch = originalFetch;
+  }
+});
+
+test('chat handler returns safe Gemini diagnostics for upstream failures', async () => {
+  const originalGeminiKey = process.env.GEMINI_API_KEY;
+  const originalFetch = global.fetch;
+  let callCount = 0;
+  try {
+    process.env.GEMINI_API_KEY = 'test-gemini-key';
+    global.fetch = async () => {
+      callCount += 1;
+      if (callCount === 1) {
+        return mockHttpResponse(200, geminiInteraction({
+          intent: 'general',
+          questionFocus: '了解近期血压情况',
+          tools: ['safety_triage', 'current_bp'],
+          missingInformation: []
+        }));
+      }
+      return mockHttpResponse(404, {
+        error: { status: 'NOT_FOUND', message: 'Requested model was not found.' }
+      });
+    };
+    const response = createApiResponse();
+    await chatHandler({ method: 'POST', body: { question: '最近血压怎么样？' } }, response);
+
+    assert.equal(response.statusCode, 502);
+    assert.equal(response.body.code, 'AI_UPSTREAM_FAILED');
+    assert.equal(response.body.stage, 'answer_generation');
+    assert.deepEqual(response.body.diagnostic, {
+      upstreamStatus: 404,
+      upstreamCode: 'NOT_FOUND',
+      upstreamMessage: 'Requested model was not found.'
+    });
+  } finally {
+    restoreEnvironment('GEMINI_API_KEY', originalGeminiKey);
     global.fetch = originalFetch;
   }
 });

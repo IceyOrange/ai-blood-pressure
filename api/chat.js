@@ -622,7 +622,12 @@ module.exports = async function handler(request, response) {
       AI_RESPONSE_INVALID: 'AI 回答未通过质量校验，请重新请求。',
       AI_UPSTREAM_FAILED: 'Gemini 暂时未完成请求，请稍后重试。'
     };
-    return sendJson(response, status, { error: messages[code], code, stage });
+    const diagnostic = Number.isInteger(error?.upstreamStatus) ? {
+      upstreamStatus: error.upstreamStatus,
+      upstreamCode: error.upstreamCode || '',
+      upstreamMessage: error.upstreamMessage || ''
+    } : null;
+    return sendJson(response, status, { error: messages[code], code, stage, ...(diagnostic ? { diagnostic } : {}) });
   }
 };
 
