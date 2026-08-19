@@ -33,7 +33,7 @@ const { buildGeminiRequest, extractGeminiText, callGemini } = require('../api/ge
 
 test('buildGeminiRequest maps messages and JSON Schema', () => {
   const body = buildGeminiRequest({
-    model: 'gemini-2.5-flash',
+    model: 'gemini-3.6-flash',
     messages: [
       { role: 'system', content: '只输出 JSON。' },
       { role: 'user', content: '分析血压。' }
@@ -43,7 +43,7 @@ test('buildGeminiRequest maps messages and JSON Schema', () => {
     maxOutputTokens: 900,
     thinkingLevel: 'low'
   });
-  assert.equal(body.model, 'gemini-2.5-flash');
+  assert.equal(body.model, 'gemini-3.6-flash');
   assert.equal(body.system_instruction, '只输出 JSON。');
   assert.match(body.input, /分析血压/);
   assert.equal(body.response_format.mime_type, 'application/json');
@@ -94,7 +94,7 @@ Use a two-call Gemini mock. The planner returns `post_meal_bp`; the answer retur
 assert.equal(response.statusCode, 200);
 assert.equal(response.body.mode, 'gemini-agent');
 assert.equal(response.body.meta.plannerModel, 'gemini-3.5-flash-lite');
-assert.equal(response.body.meta.model, 'gemini-2.5-flash');
+assert.equal(response.body.meta.model, 'gemini-3.6-flash');
 assert.equal(response.body.meta.validation.passed, true);
 assert.equal(fetchCalls.length, 2);
 assert.ok(fetchCalls.every((call) => call.url.endsWith('/v1beta/interactions')));
@@ -116,7 +116,7 @@ Add a planning Schema requiring `intent`, `questionFocus`, `tools`, and `missing
 ```js
 const { callGemini } = require('./gemini');
 const DEFAULT_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/interactions';
-const DEFAULT_MODEL = 'gemini-2.5-flash';
+const DEFAULT_MODEL = 'gemini-3.6-flash';
 const DEFAULT_PLANNER_MODEL = 'gemini-3.5-flash-lite';
 ```
 

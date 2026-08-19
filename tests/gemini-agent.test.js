@@ -244,7 +244,7 @@ test('chat handler completes the Gemini planner and answer flow', async () => {
     assert.equal(response.statusCode, 200);
     assert.equal(response.body.mode, 'gemini-agent');
     assert.equal(response.body.meta.plannerModel, 'gemini-3.5-flash-lite');
-    assert.equal(response.body.meta.model, 'gemini-2.5-flash');
+    assert.equal(response.body.meta.model, 'gemini-3.6-flash');
     assert.equal(response.body.meta.validation.passed, true);
     assert.equal(fetchCalls.length, 2);
     assert.ok(fetchCalls.every((call) => call.url.endsWith('/v1beta/interactions')));

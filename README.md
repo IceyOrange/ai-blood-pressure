@@ -40,7 +40,7 @@ http://localhost:4317
 在 Vercel 项目中打开 `Settings → Environment Variables`，添加：
 
 - `GEMINI_API_KEY`：Google AI Studio API Key，设置为 Secret。
-- `GEMINI_MODEL`：可选，默认 `gemini-2.5-flash`，负责医学沟通和回答修正；该稳定模型更适合免费额度下的移动演示。
+- `GEMINI_MODEL`：可选，默认 `gemini-3.6-flash`，负责医学沟通和回答修正；该模型是 Gemini 针对新用户当前返回的推荐版本。
 - `GEMINI_PLANNER_MODEL`：可选，默认 `gemini-3.5-flash-lite`，只负责理解问题和选择工具。
 - `GEMINI_ENDPOINT`：可选，默认 Gemini Interactions API 地址。
 

@@ -35,7 +35,7 @@
 ## 模型分工
 
 - 默认规划模型：`gemini-3.5-flash-lite`
-- 默认回答模型：`gemini-2.5-flash`
+- 默认回答模型：`gemini-3.6-flash`
 - 可选环境变量：`GEMINI_PLANNER_MODEL`、`GEMINI_MODEL`
 
 规划模型只负责识别问题意图、选择工具和列出信息缺口。回答模型根据执行计划和受控工具结果完成医学沟通。若回答未通过本地质量校验，仍由回答模型重新生成一次。
@@ -81,7 +81,7 @@
 本地 `.env.local` 和 Vercel 使用：
 
 - `GEMINI_API_KEY`：必填，来自 Google AI Studio。
-- `GEMINI_MODEL`：可选，默认 `gemini-2.5-flash`。
+- `GEMINI_MODEL`：可选，默认 `gemini-3.6-flash`。
 - `GEMINI_PLANNER_MODEL`：可选，默认 `gemini-3.5-flash-lite`。
 - `GEMINI_ENDPOINT`：可选，默认 Gemini Interactions API 地址。
 

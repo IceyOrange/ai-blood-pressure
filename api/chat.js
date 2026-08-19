@@ -1,7 +1,7 @@
 const { callGemini } = require('./gemini');
 
 const DEFAULT_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/interactions';
-const DEFAULT_MODEL = 'gemini-2.5-flash';
+const DEFAULT_MODEL = 'gemini-3.6-flash';
 const DEFAULT_PLANNER_MODEL = 'gemini-3.5-flash-lite';
 const AGENT_VERSION = 'maian-health-agent-v5-gemini-only';
 
