@@ -5,11 +5,12 @@ export const sampleData = {
     sex: '女',
     heightCm: 162,
     weightKg: 61,
-    city: '北京市朝阳区',
-    locationSource: '用户手动确认',
-    locationConfidence: '高',
-    locationInferenceEnabled: false,
-    dietaryPreference: '清淡饮食',
+    city: '北京市',
+    locationSource: '网络位置估计',
+    locationConfidence: '低',
+    locationInferenceEnabled: true,
+    dietaryPreference: '未记录',
+    memories: [],
     medication: '暂无用药记录'
   },
   device: {

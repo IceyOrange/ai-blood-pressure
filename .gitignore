@@ -2,4 +2,5 @@ config.js
 config.local.js
 .env
 .env.*
+!.env.local.example
 .visual-*
