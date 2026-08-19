@@ -1,19 +1,15 @@
 const DEFAULT_ENDPOINT = '/api/chat';
-const DEFAULT_MODEL = 'deepseek-ai/DeepSeek-V3';
 
-export function getSiliconFlowConfig() {
-  return {
-    endpoint: DEFAULT_ENDPOINT,
-    model: DEFAULT_MODEL
-  };
+export function getHealthAgentConfig() {
+  return { endpoint: DEFAULT_ENDPOINT };
 }
 
-export function hasSiliconFlowConfig() {
+export function hasHealthAgentConfig() {
   return typeof window !== 'undefined' && window.location.protocol !== 'file:';
 }
 
-export async function requestSiliconFlow({ question, brief, history = [] }) {
-  const config = getSiliconFlowConfig();
+export async function requestHealthAgent({ question, brief, history = [] }) {
+  const config = getHealthAgentConfig();
   const response = await fetch(config.endpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -34,7 +30,7 @@ export async function requestSiliconFlow({ question, brief, history = [] }) {
   }
   if (!payload.answer || typeof payload.answer !== 'object') throw new Error('AI proxy returned an invalid response');
   return {
-    mode: payload.mode || 'siliconflow-agent',
+    mode: payload.mode || 'gemini-agent',
     answer: payload.answer,
     meta: payload.meta || {}
   };

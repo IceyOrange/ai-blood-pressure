@@ -123,7 +123,7 @@ const server = http.createServer(async (request, response) => {
 });
 
 server.listen(port, '127.0.0.1', () => {
-  const keyStatus = process.env.SILICONFLOW_API_KEY ? '已读取 SILICONFLOW_API_KEY' : '未找到 .env.local 中的 SILICONFLOW_API_KEY';
+  const keyStatus = process.env.GEMINI_API_KEY ? '已读取 GEMINI_API_KEY' : '未找到 .env.local 中的 GEMINI_API_KEY';
   console.log(`脉安本地服务：http://localhost:${port}`);
   console.log(`AI 状态：${keyStatus}`);
 });

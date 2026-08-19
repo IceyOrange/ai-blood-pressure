@@ -1,7 +1,9 @@
-const DEFAULT_ENDPOINT = 'https://api.siliconflow.cn/v1/chat/completions';
-const DEFAULT_MODEL = 'deepseek-ai/DeepSeek-V3';
-const DEFAULT_PLANNER_MODEL = 'Qwen/Qwen2.5-7B-Instruct';
-const AGENT_VERSION = 'maian-health-agent-v4-fast-planner';
+const { callGemini } = require('./gemini');
+
+const DEFAULT_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/interactions';
+const DEFAULT_MODEL = 'gemini-3.7-flash';
+const DEFAULT_PLANNER_MODEL = 'gemini-3.5-flash-lite';
+const AGENT_VERSION = 'maian-health-agent-v5-gemini-only';
 
 const PLANNING_SYSTEM_PROMPT = `你是脉安健康 Agent 的任务规划器，不直接回答用户。
 
@@ -46,6 +48,50 @@ JSON 结构：
   "dataBasis": "本次使用了哪些数据、缺少哪些关键数据",
   "confidence": "high|medium|low"
 }`;
+
+const INTENT_NAMES = ['urgent', 'post_meal_bp', 'bp_trend', 'bp_education', 'heart_rate', 'diet', 'sleep', 'measurement', 'medication', 'symptom', 'general'];
+const TOOL_NAMES = ['safety_triage', 'current_bp', 'bp_trend', 'heart_rate_summary', 'diet_summary', 'sleep_summary', 'preference_memory', 'post_meal_knowledge', 'meal_data_gap', 'bp_knowledge', 'symptom_knowledge', 'measurement_knowledge', 'medication_safety'];
+
+const PLANNING_RESPONSE_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    intent: { type: 'string', enum: INTENT_NAMES },
+    questionFocus: { type: 'string' },
+    tools: { type: 'array', items: { type: 'string', enum: TOOL_NAMES }, maxItems: 7 },
+    missingInformation: { type: 'array', items: { type: 'string' }, maxItems: 3 }
+  },
+  required: ['intent', 'questionFocus', 'tools', 'missingInformation']
+};
+
+const ANSWER_RESPONSE_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    title: { type: 'string' },
+    directAnswer: { type: 'string' },
+    keyPoints: {
+      type: 'array',
+      maxItems: 4,
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          kind: { type: 'string', enum: ['mechanism', 'data', 'uncertainty', 'method', 'safety', 'action'] },
+          title: { type: 'string' },
+          text: { type: 'string' }
+        },
+        required: ['kind', 'title', 'text']
+      }
+    },
+    actions: { type: 'array', items: { type: 'string' }, maxItems: 3 },
+    caution: { type: 'string' },
+    followUps: { type: 'array', items: { type: 'string' }, maxItems: 3 },
+    dataBasis: { type: 'string' },
+    confidence: { type: 'string', enum: ['high', 'medium', 'low'] }
+  },
+  required: ['title', 'directAnswer', 'keyPoints', 'actions', 'caution', 'followUps', 'dataBasis', 'confidence']
+};
 
 function readBody(request) {
   if (!request.body) return {};
@@ -235,7 +281,17 @@ async function createExecutionPlan({ question, context, endpoint, apiKey, planne
       ].join('\n\n')
     }
   ];
-  const rawPlan = await callSiliconFlow({ endpoint, apiKey, model: plannerModel, messages, maxTokens: 420, temperature: 0, timeoutMs: 15000 });
+  const rawPlan = await callGemini({
+    endpoint,
+    apiKey,
+    model: plannerModel,
+    messages,
+    schema: PLANNING_RESPONSE_SCHEMA,
+    maxOutputTokens: 600,
+    temperature: 0,
+    thinkingLevel: 'low',
+    timeoutMs: 15000
+  });
   const plannedTask = normalizePlannedTask(parseModelJson(rawPlan), safety, question);
   if (!plannedTask) {
     const planningError = new Error('AI planner returned an invalid plan');
@@ -467,43 +523,6 @@ function buildRepairMessages(question, history, plan, toolResults, rawAnswer, vi
   ];
 }
 
-async function callSiliconFlow({ endpoint, apiKey, model, messages, maxTokens = 1200, temperature = 0.15, timeoutMs = 26000 }) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const upstream = await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-      signal: controller.signal,
-      body: JSON.stringify({ model, temperature, max_tokens: maxTokens, response_format: { type: 'json_object' }, messages })
-    });
-    const payload = await upstream.json().catch(() => ({}));
-    if (!upstream.ok) {
-      const upstreamError = new Error(`SiliconFlow upstream request failed with status ${upstream.status}`);
-      upstreamError.code = [401, 403].includes(upstream.status) ? 'AI_AUTH_FAILED' : upstream.status === 429 ? 'AI_RATE_LIMITED' : 'AI_UPSTREAM_FAILED';
-      upstreamError.upstreamStatus = upstream.status;
-      throw upstreamError;
-    }
-    if (payload.choices?.[0]?.finish_reason === 'length') {
-      const lengthError = new Error('SiliconFlow response was truncated');
-      lengthError.code = 'AI_RESPONSE_INVALID';
-      throw lengthError;
-    }
-    const content = payload.choices?.[0]?.message?.content;
-    if (!content) throw new Error('SiliconFlow returned an empty response');
-    return content;
-  } catch (error) {
-    if (error?.name === 'AbortError' || controller.signal.aborted) {
-      const timeoutError = new Error(`SiliconFlow request timed out after ${timeoutMs} ms`);
-      timeoutError.code = 'AI_TIMEOUT';
-      throw timeoutError;
-    }
-    throw error;
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
 function sendJson(response, status, payload) {
   response.status(status).json(payload);
 }
@@ -521,14 +540,14 @@ module.exports = async function handler(request, response) {
     return sendJson(response, 400, { error: '请先输入想咨询的问题。', code: 'QUESTION_REQUIRED' });
   }
 
-  const apiKey = process.env.SILICONFLOW_API_KEY;
+  const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
-    return sendJson(response, 503, { error: '专业 AI 服务尚未配置。本次不会使用规则代答。', code: 'AI_NOT_CONFIGURED' });
+    return sendJson(response, 503, { error: 'Gemini AI 服务尚未配置。本次不会使用规则代答。', code: 'AI_NOT_CONFIGURED' });
   }
 
-  const endpoint = process.env.SILICONFLOW_ENDPOINT || DEFAULT_ENDPOINT;
-  const model = process.env.SILICONFLOW_MODEL || DEFAULT_MODEL;
-  const plannerModel = process.env.SILICONFLOW_PLANNER_MODEL || DEFAULT_PLANNER_MODEL;
+  const endpoint = process.env.GEMINI_ENDPOINT || DEFAULT_ENDPOINT;
+  const model = process.env.GEMINI_MODEL || DEFAULT_MODEL;
+  const plannerModel = process.env.GEMINI_PLANNER_MODEL || DEFAULT_PLANNER_MODEL;
   const context = compactContext(body.brief && typeof body.brief === 'object' ? body.brief : {});
   const history = sanitizeHistory(body.history);
 
@@ -539,7 +558,17 @@ module.exports = async function handler(request, response) {
     const toolResults = executeTools(plan, context);
     const messages = buildMessages(question, history, plan, toolResults);
     stage = 'answer_generation';
-    const rawAnswer = await callSiliconFlow({ endpoint, apiKey, model, messages });
+    const rawAnswer = await callGemini({
+      endpoint,
+      apiKey,
+      model,
+      messages,
+      schema: ANSWER_RESPONSE_SCHEMA,
+      maxOutputTokens: 1600,
+      temperature: 0.15,
+      thinkingLevel: 'low',
+      timeoutMs: 28000
+    });
     let answer = normalizeAnswer(parseModelJson(rawAnswer), plan.intent);
     const initialViolations = answer ? validateAnswer(answer, plan) : ['invalid_structured_output'];
     let revisionAttempted = false;
@@ -547,7 +576,17 @@ module.exports = async function handler(request, response) {
       revisionAttempted = true;
       stage = 'answer_revision';
       const repairMessages = buildRepairMessages(question, history, plan, toolResults, rawAnswer, initialViolations);
-      const repairedRawAnswer = await callSiliconFlow({ endpoint, apiKey, model, messages: repairMessages, temperature: 0.05 });
+      const repairedRawAnswer = await callGemini({
+        endpoint,
+        apiKey,
+        model,
+        messages: repairMessages,
+        schema: ANSWER_RESPONSE_SCHEMA,
+        maxOutputTokens: 1600,
+        temperature: 0.05,
+        thinkingLevel: 'low',
+        timeoutMs: 22000
+      });
       answer = normalizeAnswer(parseModelJson(repairedRawAnswer), plan.intent);
       const repairViolations = answer ? validateAnswer(answer, plan) : ['invalid_structured_output'];
       if (repairViolations.length) {
@@ -568,7 +607,7 @@ module.exports = async function handler(request, response) {
     };
 
     return sendJson(response, 200, {
-      mode: revisionAttempted ? 'siliconflow-agent-revised' : 'siliconflow-agent',
+      mode: revisionAttempted ? 'gemini-agent-revised' : 'gemini-agent',
       answer,
       meta: { ...meta, validation: { passed: true, violations: [], revisionAttempted, initialViolations } }
     });
@@ -578,10 +617,10 @@ module.exports = async function handler(request, response) {
     const status = code === 'AI_TIMEOUT' ? 504 : code === 'AI_AUTH_FAILED' ? 502 : code === 'AI_RATE_LIMITED' ? 429 : 502;
     const messages = {
       AI_TIMEOUT: 'AI 本次响应超时，请直接重试。这不代表 API Key 未配置。',
-      AI_AUTH_FAILED: '硅基流动拒绝了当前凭证，请检查 API Key 是否有效。',
-      AI_RATE_LIMITED: '硅基流动当前请求较多，请稍后重试。',
+      AI_AUTH_FAILED: 'Gemini 拒绝了当前凭证，请检查 Google AI Studio API Key 是否有效。',
+      AI_RATE_LIMITED: 'Gemini 当前请求较多或免费额度已达到限制，请稍后重试。',
       AI_RESPONSE_INVALID: 'AI 回答未通过质量校验，请重新请求。',
-      AI_UPSTREAM_FAILED: '硅基流动暂时未完成请求，请稍后重试。'
+      AI_UPSTREAM_FAILED: 'Gemini 暂时未完成请求，请稍后重试。'
     };
     return sendJson(response, status, { error: messages[code], code, stage });
   }

@@ -6,7 +6,7 @@
 
 - **移动端 PWA**：首页、血压记录、我的三个主路径；测量发生在硬件端，App 只负责同步状态、结果解释与长期管理。
 - **数据展示**：最新血压、心率、7/30/90 天趋势、晨晚对比、饮食钠摄入和睡眠情况。
-- **专业 Agent 链路**：对话采用“问题规划 → 安全分诊 → 数据/知识工具 → 硅基流动生成 → 相关性与安全校验”，不是把全部数据拼进一个 Prompt 后直接输出。
+- **专业 Agent 链路**：对话采用“Gemini 问题规划 → 安全分诊 → 数据/知识工具 → Gemini 医学沟通 → 相关性与安全校验”，不是把全部数据拼进一个 Prompt 后直接输出。
 - **AI-only 对话**：首页和记录页展示可核对的数据总结，真实 AI 对话只在总结页按需出现。AI 请求失败时只显示重试入口，不再使用规则生成健康回答。
 - **低摩擦反馈**：“不太准确”会先识别用户想纠正的是饮食、睡眠还是地区信息，再提供不超过四个单选项，反馈会作为本人记忆保存。
 - **Excel 样例**：`data/blood-pressure-sample.xlsx` 含 `血压记录`、`饮食记录`、`睡眠记录`、`用户档案`、`使用说明` 5 个工作表。
@@ -19,7 +19,7 @@
 Copy-Item .env.local.example .env.local
 ```
 
-打开 `.env.local`，填写真实的 `SILICONFLOW_API_KEY`，然后运行零依赖本地服务：
+打开 `.env.local`，填写从 Google AI Studio 获取的 `GEMINI_API_KEY`，然后运行零依赖本地服务：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\start-local.ps1
@@ -31,22 +31,22 @@ powershell -ExecutionPolicy Bypass -File .\start-local.ps1
 http://localhost:4317
 ```
 
-`start-local.ps1` 会优先使用系统 Node.js；在当前 Codex 环境下也会自动寻找内置 Node.js。控制台显示“已读取 SILICONFLOW_API_KEY”后，本地健康助手才会真实调用硅基流动。手机正式演示建议使用 Vercel HTTPS 地址。
+`start-local.ps1` 会优先使用系统 Node.js；在当前 Codex 环境下也会自动寻找内置 Node.js。控制台显示“已读取 GEMINI_API_KEY”后，本地健康助手才会真实调用 Gemini。手机正式演示建议使用 Vercel HTTPS 地址。
 
-## 配置硅基流动
+## 配置 Gemini
 
-当前前端不会读取或保存 API Key，AI 请求统一发送到同源 `/api/chat`，由 `api/chat.js` 读取 Vercel Serverless 环境变量并转发到硅基流动。
+当前前端不会读取或保存 API Key，AI 请求统一发送到同源 `/api/chat`，由 `api/chat.js` 读取 Vercel Serverless 环境变量并调用 Gemini Interactions API。
 
 在 Vercel 项目中打开 `Settings → Environment Variables`，添加：
 
-- `SILICONFLOW_API_KEY`：硅基流动 API Key，设置为 Secret。
-- `SILICONFLOW_MODEL`：可选，默认 `deepseek-ai/DeepSeek-V3`。
-- `SILICONFLOW_PLANNER_MODEL`：可选，默认 `Qwen/Qwen2.5-7B-Instruct`，只负责快速理解问题和选择工具，医学回答仍由主模型生成。
-- `SILICONFLOW_ENDPOINT`：可选，默认硅基流动 Chat Completions 地址。
+- `GEMINI_API_KEY`：Google AI Studio API Key，设置为 Secret。
+- `GEMINI_MODEL`：可选，默认 `gemini-3.7-flash`，负责医学沟通和回答修正。
+- `GEMINI_PLANNER_MODEL`：可选，默认 `gemini-3.5-flash-lite`，只负责理解问题和选择工具。
+- `GEMINI_ENDPOINT`：可选，默认 Gemini Interactions API 地址。
 
-保存后重新 Deploy 或执行 Redeploy，健康助手对话就会通过服务端调用硅基流动。API Key 不会下发到浏览器。若环境变量未配置或云端请求失败，页面会明确提示 AI 未生成回答并提供重试，不会使用规则代答。
+保存后重新 Deploy 或执行 Redeploy，健康助手对话就会通过服务端调用 Gemini。API Key 不会下发到浏览器。若环境变量未配置或云端请求失败，页面会明确提示 AI 未生成回答并提供重试，不会使用规则代答。
 
-如果旧版本曾经把 Key 写入 `config.js` 并提交过 GitHub，请先在硅基流动后台撤销旧 Key，再生成新的 Key 写入 Vercel。
+不要把 AI Studio Key 写入 `config.js`、前端代码或 GitHub；如果曾误提交，请立即在 Google AI Studio 撤销并重新生成。
 ## Agent 设计要点
 
 - **先规划再回答**：第一次模型调用由轻量 AI 识别用户真正的问题、选择所需工具和列出信息缺口；确定性逻辑只保留急症拦截，不生成健康回答。第二次调用由主模型完成医学沟通。
@@ -76,5 +76,5 @@ http://localhost:4317
 3. 点击 Deploy，Vercel 会直接托管根目录的 `index.html`。
 4. 部署完成后用手机访问 Vercel 域名；HTTPS 会自动满足 PWA Service Worker 要求。
 
-部署后如果没有配置 `SILICONFLOW_API_KEY`，页面不会生成健康回答；配置后，前端通过 `api/chat.js` 调用硅基流动的 AI-only Agent 链路。
+部署后如果没有配置 `GEMINI_API_KEY`，页面不会生成健康回答；配置后，前端通过 `api/chat.js` 调用 Gemini-only Agent 链路。
 

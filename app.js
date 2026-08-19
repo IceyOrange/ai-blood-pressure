@@ -1,6 +1,6 @@
 import { sampleData } from './data/sample-data.js';
 import { buildDoctorBrief, getBloodPressureCategory, summarizeVitals } from './agent.js';
-import { hasSiliconFlowConfig, requestSiliconFlow } from './siliconflow.js';
+import { hasHealthAgentConfig, requestHealthAgent } from './ai-service.js';
 
 const MEMORY_STORAGE_KEY = 'maian-health-memories-v1';
 const cloneData = (value) => JSON.parse(JSON.stringify(value));
@@ -669,30 +669,30 @@ async function submitQuestion(question) {
   const replyIndex = state.chat.length - 1;
   let completedMessage;
   try {
-    if (!hasSiliconFlowConfig()) throw new Error('AI service requires an HTTP deployment');
-    const response = await requestSiliconFlow({ question: trimmed, brief: state.brief, history });
+    if (!hasHealthAgentConfig()) throw new Error('AI service requires an HTTP deployment');
+    const response = await requestHealthAgent({ question: trimmed, brief: state.brief, history });
     completedMessage = {
       id: messageId,
       role: 'assistant',
       response: response.answer,
       meta: response.meta,
-      source: response.mode.startsWith('siliconflow-agent') ? 'cloud' : 'error'
+      source: response.mode.startsWith('gemini-agent') ? 'cloud' : 'error'
     };
   } catch (error) {
     const isLocalhost = ['localhost', '127.0.0.1'].includes(window.location.hostname);
     const unavailableMessage = error.code === 'AI_TIMEOUT'
       ? 'AI 已收到问题，但本次生成超时。请点击下方按钮重新请求，这不代表 API Key 未配置。'
       : error.code === 'AI_RATE_LIMITED'
-        ? '硅基流动当前请求较多，请稍等片刻后重新请求。'
+        ? 'Gemini 当前请求较多或免费额度已达到限制，请稍等片刻后重新请求。'
         : error.code === 'AI_RESPONSE_INVALID'
           ? 'AI 本次回答未通过质量校验，因此没有展示。请重新请求一次。'
           : error.code === 'AI_AUTH_FAILED'
-            ? '硅基流动拒绝了当前凭证，请检查 API Key 是否有效。'
+            ? 'Gemini 拒绝了当前凭证，请检查 Google AI Studio API Key 是否有效。'
             : isLocalhost
-              ? '本地页面已打开，但 AI 接口没有运行或未读取到 API Key。请创建 .env.local，并使用 start-local.ps1 启动项目；不要使用纯静态服务器启动 AI 演示。'
+              ? '本地页面已打开，但 AI 接口没有运行或未读取到 GEMINI_API_KEY。请创建 .env.local，并使用 start-local.ps1 启动项目；不要使用纯静态服务器启动 AI 演示。'
               : error.code === 'AI_NOT_CONFIGURED'
-                ? 'Vercel 当前部署没有读取到 SILICONFLOW_API_KEY。请在项目环境变量中添加后重新部署。'
-                : '硅基流动暂时未完成请求，请点击下方按钮重试。';
+                ? 'Vercel 当前部署没有读取到 GEMINI_API_KEY。请在项目环境变量中添加后重新部署。'
+                : 'Gemini 暂时未完成请求，请点击下方按钮重试。';
     state.chat[replyIndex] = {
       id: messageId,
       role: 'assistant',

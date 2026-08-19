@@ -1,11 +1,11 @@
-const CACHE_NAME = 'maian-pwa-v9';
+const CACHE_NAME = 'maian-pwa-v10';
 const APP_SHELL = [
   './',
   './index.html',
   './styles.css',
   './app.js',
   './agent.js',
-  './siliconflow.js',
+  './ai-service.js',
   './data/sample-data.js',
   './manifest.webmanifest',
   './assets/icon.svg'
