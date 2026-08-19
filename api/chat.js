@@ -1,6 +1,7 @@
 const DEFAULT_ENDPOINT = 'https://api.siliconflow.cn/v1/chat/completions';
 const DEFAULT_MODEL = 'deepseek-ai/DeepSeek-V3';
-const AGENT_VERSION = 'maian-health-agent-v3-ai-only';
+const DEFAULT_PLANNER_MODEL = 'Qwen/Qwen2.5-7B-Instruct';
+const AGENT_VERSION = 'maian-health-agent-v4-fast-planner';
 
 const PLANNING_SYSTEM_PROMPT = `你是脉安健康 Agent 的任务规划器，不直接回答用户。
 
@@ -221,7 +222,7 @@ function normalizePlannedTask(candidate, safety, question = '') {
   };
 }
 
-async function createExecutionPlan({ question, context, endpoint, apiKey, model }) {
+async function createExecutionPlan({ question, context, endpoint, apiKey, plannerModel }) {
   const safety = runSafetyTriage(question, context);
   const messages = [
     { role: 'system', content: PLANNING_SYSTEM_PROMPT },
@@ -234,9 +235,13 @@ async function createExecutionPlan({ question, context, endpoint, apiKey, model 
       ].join('\n\n')
     }
   ];
-  const rawPlan = await callSiliconFlow({ endpoint, apiKey, model, messages, maxTokens: 420, temperature: 0, timeoutMs: 12000 });
+  const rawPlan = await callSiliconFlow({ endpoint, apiKey, model: plannerModel, messages, maxTokens: 420, temperature: 0, timeoutMs: 15000 });
   const plannedTask = normalizePlannedTask(parseModelJson(rawPlan), safety, question);
-  if (!plannedTask) throw new Error('AI planner returned an invalid plan');
+  if (!plannedTask) {
+    const planningError = new Error('AI planner returned an invalid plan');
+    planningError.code = 'AI_RESPONSE_INVALID';
+    throw planningError;
+  }
   return plannedTask;
 }
 
@@ -462,7 +467,7 @@ function buildRepairMessages(question, history, plan, toolResults, rawAnswer, vi
   ];
 }
 
-async function callSiliconFlow({ endpoint, apiKey, model, messages, maxTokens = 1200, temperature = 0.15, timeoutMs = 22000 }) {
+async function callSiliconFlow({ endpoint, apiKey, model, messages, maxTokens = 1200, temperature = 0.15, timeoutMs = 26000 }) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -470,7 +475,7 @@ async function callSiliconFlow({ endpoint, apiKey, model, messages, maxTokens = 
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
       signal: controller.signal,
-      body: JSON.stringify({ model, temperature, max_tokens: maxTokens, messages })
+      body: JSON.stringify({ model, temperature, max_tokens: maxTokens, response_format: { type: 'json_object' }, messages })
     });
     const payload = await upstream.json().catch(() => ({}));
     if (!upstream.ok) {
@@ -478,6 +483,11 @@ async function callSiliconFlow({ endpoint, apiKey, model, messages, maxTokens = 
       upstreamError.code = [401, 403].includes(upstream.status) ? 'AI_AUTH_FAILED' : upstream.status === 429 ? 'AI_RATE_LIMITED' : 'AI_UPSTREAM_FAILED';
       upstreamError.upstreamStatus = upstream.status;
       throw upstreamError;
+    }
+    if (payload.choices?.[0]?.finish_reason === 'length') {
+      const lengthError = new Error('SiliconFlow response was truncated');
+      lengthError.code = 'AI_RESPONSE_INVALID';
+      throw lengthError;
     }
     const content = payload.choices?.[0]?.message?.content;
     if (!content) throw new Error('SiliconFlow returned an empty response');
@@ -518,12 +528,13 @@ module.exports = async function handler(request, response) {
 
   const endpoint = process.env.SILICONFLOW_ENDPOINT || DEFAULT_ENDPOINT;
   const model = process.env.SILICONFLOW_MODEL || DEFAULT_MODEL;
+  const plannerModel = process.env.SILICONFLOW_PLANNER_MODEL || DEFAULT_PLANNER_MODEL;
   const context = compactContext(body.brief && typeof body.brief === 'object' ? body.brief : {});
   const history = sanitizeHistory(body.history);
 
   let stage = 'planning';
   try {
-    const plan = await createExecutionPlan({ question, context, endpoint, apiKey, model });
+    const plan = await createExecutionPlan({ question, context, endpoint, apiKey, plannerModel });
     stage = 'tool_analysis';
     const toolResults = executeTools(plan, context);
     const messages = buildMessages(question, history, plan, toolResults);
@@ -552,6 +563,7 @@ module.exports = async function handler(request, response) {
       tools: toolResults.map((result) => ({ name: result.name, label: result.label })),
       stages: ['AI 问题规划', '安全分诊', '健康数据核对', '医学知识匹配', revisionAttempted ? 'AI 自动修正' : '回答安全校验'],
       model,
+      plannerModel,
       confidence: answer.confidence
     };
 
