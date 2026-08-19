@@ -26,7 +26,11 @@ export async function requestSiliconFlow({ question, brief, history = [] }) {
     payload = {};
   }
   if (!response.ok) {
-    throw new Error(payload.error || `AI proxy request failed: ${response.status}`);
+    const requestError = new Error(payload.error || `AI proxy request failed: ${response.status}`);
+    requestError.code = payload.code || 'AI_PROXY_FAILED';
+    requestError.stage = payload.stage || '';
+    requestError.status = response.status;
+    throw requestError;
   }
   if (!payload.answer || typeof payload.answer !== 'object') throw new Error('AI proxy returned an invalid response');
   return {

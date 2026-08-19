@@ -234,7 +234,7 @@ async function createExecutionPlan({ question, context, endpoint, apiKey, model 
       ].join('\n\n')
     }
   ];
-  const rawPlan = await callSiliconFlow({ endpoint, apiKey, model, messages, maxTokens: 420, temperature: 0, timeoutMs: 6000 });
+  const rawPlan = await callSiliconFlow({ endpoint, apiKey, model, messages, maxTokens: 420, temperature: 0, timeoutMs: 12000 });
   const plannedTask = normalizePlannedTask(parseModelJson(rawPlan), safety, question);
   if (!plannedTask) throw new Error('AI planner returned an invalid plan');
   return plannedTask;
@@ -462,7 +462,7 @@ function buildRepairMessages(question, history, plan, toolResults, rawAnswer, vi
   ];
 }
 
-async function callSiliconFlow({ endpoint, apiKey, model, messages, maxTokens = 1200, temperature = 0.15, timeoutMs = 10000 }) {
+async function callSiliconFlow({ endpoint, apiKey, model, messages, maxTokens = 1200, temperature = 0.15, timeoutMs = 22000 }) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -472,11 +472,23 @@ async function callSiliconFlow({ endpoint, apiKey, model, messages, maxTokens = 
       signal: controller.signal,
       body: JSON.stringify({ model, temperature, max_tokens: maxTokens, messages })
     });
-    const payload = await upstream.json();
-    if (!upstream.ok) throw new Error('SiliconFlow upstream request failed');
+    const payload = await upstream.json().catch(() => ({}));
+    if (!upstream.ok) {
+      const upstreamError = new Error(`SiliconFlow upstream request failed with status ${upstream.status}`);
+      upstreamError.code = [401, 403].includes(upstream.status) ? 'AI_AUTH_FAILED' : upstream.status === 429 ? 'AI_RATE_LIMITED' : 'AI_UPSTREAM_FAILED';
+      upstreamError.upstreamStatus = upstream.status;
+      throw upstreamError;
+    }
     const content = payload.choices?.[0]?.message?.content;
     if (!content) throw new Error('SiliconFlow returned an empty response');
     return content;
+  } catch (error) {
+    if (error?.name === 'AbortError' || controller.signal.aborted) {
+      const timeoutError = new Error(`SiliconFlow request timed out after ${timeoutMs} ms`);
+      timeoutError.code = 'AI_TIMEOUT';
+      throw timeoutError;
+    }
+    throw error;
   } finally {
     clearTimeout(timeout);
   }
@@ -509,21 +521,29 @@ module.exports = async function handler(request, response) {
   const context = compactContext(body.brief && typeof body.brief === 'object' ? body.brief : {});
   const history = sanitizeHistory(body.history);
 
+  let stage = 'planning';
   try {
     const plan = await createExecutionPlan({ question, context, endpoint, apiKey, model });
+    stage = 'tool_analysis';
     const toolResults = executeTools(plan, context);
     const messages = buildMessages(question, history, plan, toolResults);
+    stage = 'answer_generation';
     const rawAnswer = await callSiliconFlow({ endpoint, apiKey, model, messages });
     let answer = normalizeAnswer(parseModelJson(rawAnswer), plan.intent);
     const initialViolations = answer ? validateAnswer(answer, plan) : ['invalid_structured_output'];
     let revisionAttempted = false;
     if (initialViolations.length) {
       revisionAttempted = true;
+      stage = 'answer_revision';
       const repairMessages = buildRepairMessages(question, history, plan, toolResults, rawAnswer, initialViolations);
       const repairedRawAnswer = await callSiliconFlow({ endpoint, apiKey, model, messages: repairMessages, temperature: 0.05 });
       answer = normalizeAnswer(parseModelJson(repairedRawAnswer), plan.intent);
       const repairViolations = answer ? validateAnswer(answer, plan) : ['invalid_structured_output'];
-      if (repairViolations.length) throw new Error(`AI revision failed validation: ${repairViolations.join(',')}`);
+      if (repairViolations.length) {
+        const validationError = new Error(`AI revision failed validation: ${repairViolations.join(',')}`);
+        validationError.code = 'AI_RESPONSE_INVALID';
+        throw validationError;
+      }
     }
     const meta = {
       agentVersion: AGENT_VERSION,
@@ -542,7 +562,16 @@ module.exports = async function handler(request, response) {
     });
   } catch (error) {
     console.error('Health agent request failed', error instanceof Error ? error.message : 'unknown error');
-    return sendJson(response, 502, { error: '专业 AI 服务暂时不可用。本次不会使用规则代答，请稍后重试。', code: 'AI_UPSTREAM_FAILED' });
+    const code = ['AI_TIMEOUT', 'AI_AUTH_FAILED', 'AI_RATE_LIMITED', 'AI_RESPONSE_INVALID'].includes(error?.code) ? error.code : 'AI_UPSTREAM_FAILED';
+    const status = code === 'AI_TIMEOUT' ? 504 : code === 'AI_AUTH_FAILED' ? 502 : code === 'AI_RATE_LIMITED' ? 429 : 502;
+    const messages = {
+      AI_TIMEOUT: 'AI 本次响应超时，请直接重试。这不代表 API Key 未配置。',
+      AI_AUTH_FAILED: '硅基流动拒绝了当前凭证，请检查 API Key 是否有效。',
+      AI_RATE_LIMITED: '硅基流动当前请求较多，请稍后重试。',
+      AI_RESPONSE_INVALID: 'AI 回答未通过质量校验，请重新请求。',
+      AI_UPSTREAM_FAILED: '硅基流动暂时未完成请求，请稍后重试。'
+    };
+    return sendJson(response, status, { error: messages[code], code, stage });
   }
 };
 

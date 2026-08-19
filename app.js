@@ -680,9 +680,19 @@ async function submitQuestion(question) {
     };
   } catch (error) {
     const isLocalhost = ['localhost', '127.0.0.1'].includes(window.location.hostname);
-    const unavailableMessage = isLocalhost
-      ? '本地页面已打开，但 AI 接口没有运行或未读取到 API Key。请创建 .env.local，并使用 start-local.ps1 启动项目；不要使用纯静态服务器启动 AI 演示。'
-      : '为了保证演示内容来自真实 AI，本次没有使用规则代答。请确认 Vercel 已配置硅基流动 API Key，或稍后重新请求。';
+    const unavailableMessage = error.code === 'AI_TIMEOUT'
+      ? 'AI 已收到问题，但本次生成超时。请点击下方按钮重新请求，这不代表 API Key 未配置。'
+      : error.code === 'AI_RATE_LIMITED'
+        ? '硅基流动当前请求较多，请稍等片刻后重新请求。'
+        : error.code === 'AI_RESPONSE_INVALID'
+          ? 'AI 本次回答未通过质量校验，因此没有展示。请重新请求一次。'
+          : error.code === 'AI_AUTH_FAILED'
+            ? '硅基流动拒绝了当前凭证，请检查 API Key 是否有效。'
+            : isLocalhost
+              ? '本地页面已打开，但 AI 接口没有运行或未读取到 API Key。请创建 .env.local，并使用 start-local.ps1 启动项目；不要使用纯静态服务器启动 AI 演示。'
+              : error.code === 'AI_NOT_CONFIGURED'
+                ? 'Vercel 当前部署没有读取到 SILICONFLOW_API_KEY。请在项目环境变量中添加后重新部署。'
+                : '硅基流动暂时未完成请求，请点击下方按钮重试。';
     state.chat[replyIndex] = {
       id: messageId,
       role: 'assistant',
