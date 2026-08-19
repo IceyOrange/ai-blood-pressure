@@ -214,6 +214,16 @@ test('answer validation accepts explicit medical negation while rejecting unsafe
   }, plan).includes('unsupported_diagnosis_or_certainty'));
 });
 
+test('Gemini response timeout budget fits the Vercel function window', () => {
+  const timeoutBudget = chatHandler._internal.TIMEOUT_BUDGET;
+  const vercelConfig = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'vercel.json'), 'utf8'));
+  const maximumDurationMs = vercelConfig.functions['api/chat.js'].maxDuration * 1000;
+
+  assert.ok(timeoutBudget.answerGeneration >= 45000);
+  assert.ok(timeoutBudget.answerRevision >= 35000);
+  assert.ok(maximumDurationMs >= timeoutBudget.planning + timeoutBudget.answerGeneration + timeoutBudget.answerRevision + 10000);
+});
+
 test('chat handler completes the Gemini planner and answer flow', async () => {
   const originalGeminiKey = process.env.GEMINI_API_KEY;
   const originalGeminiModel = process.env.GEMINI_MODEL;

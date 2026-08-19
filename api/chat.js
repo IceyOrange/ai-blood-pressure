@@ -4,6 +4,11 @@ const DEFAULT_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/inter
 const DEFAULT_MODEL = 'gemini-3.6-flash';
 const DEFAULT_PLANNER_MODEL = 'gemini-3.5-flash-lite';
 const AGENT_VERSION = 'maian-health-agent-v5-gemini-only';
+const TIMEOUT_BUDGET = Object.freeze({
+  planning: 15000,
+  answerGeneration: 50000,
+  answerRevision: 40000
+});
 
 const PLANNING_SYSTEM_PROMPT = `你是脉安健康 Agent 的任务规划器，不直接回答用户。
 
@@ -290,7 +295,7 @@ async function createExecutionPlan({ question, context, endpoint, apiKey, planne
     maxOutputTokens: 600,
     temperature: 0,
     thinkingLevel: 'low',
-    timeoutMs: 15000
+    timeoutMs: TIMEOUT_BUDGET.planning
   });
   const plannedTask = normalizePlannedTask(parseModelJson(rawPlan), safety, question);
   if (!plannedTask) {
@@ -573,7 +578,7 @@ module.exports = async function handler(request, response) {
       maxOutputTokens: 1600,
       temperature: 0.15,
       thinkingLevel: 'low',
-      timeoutMs: 28000
+      timeoutMs: TIMEOUT_BUDGET.answerGeneration
     });
     let answer = normalizeAnswer(parseModelJson(rawAnswer), plan.intent);
     const initialViolations = answer ? validateAnswer(answer, plan) : ['invalid_structured_output'];
@@ -591,7 +596,7 @@ module.exports = async function handler(request, response) {
         maxOutputTokens: 1600,
         temperature: 0.05,
         thinkingLevel: 'low',
-        timeoutMs: 22000
+        timeoutMs: TIMEOUT_BUDGET.answerRevision
       });
       answer = normalizeAnswer(parseModelJson(repairedRawAnswer), plan.intent);
       const repairViolations = answer ? validateAnswer(answer, plan) : ['invalid_structured_output'];
@@ -643,5 +648,6 @@ module.exports._internal = {
   normalizeAnswer,
   normalizePlannedTask,
   parseModelJson,
-  validateAnswer
+  validateAnswer,
+  TIMEOUT_BUDGET
 };
