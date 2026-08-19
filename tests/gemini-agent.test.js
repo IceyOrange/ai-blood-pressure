@@ -189,6 +189,31 @@ test('extractGeminiText rejects incomplete and empty output', () => {
   );
 });
 
+test('answer validation accepts explicit medical negation while rejecting unsafe advice', () => {
+  const plan = { intent: 'bp_trend', safety: { level: 'routine' } };
+  const baseAnswer = {
+    title: '先规范复测并记录',
+    directAnswer: '近期血压偏高需要继续观察，但这不一定是病情恶化，也不能据此诊断为高血压。',
+    keyPoints: [{ kind: 'uncertainty', title: '单次读数有限', text: '连续记录更有助于判断趋势。' }],
+    actions: ['静坐五分钟后规范复测。'],
+    caution: '不建议自行调整用药。',
+    followUps: [],
+    dataBasis: '使用了近期血压摘要。',
+    confidence: 'medium'
+  };
+
+  assert.deepEqual(chatHandler._internal.validateAnswer(baseAnswer, plan), []);
+  assert.ok(chatHandler._internal.validateAnswer({
+    ...baseAnswer,
+    directAnswer: '近期血压偏高，可以自行加药。',
+    caution: ''
+  }, plan).includes('unsafe_medication_advice'));
+  assert.ok(chatHandler._internal.validateAnswer({
+    ...baseAnswer,
+    directAnswer: '近期血压偏高，这一定是高血压。'
+  }, plan).includes('unsupported_diagnosis_or_certainty'));
+});
+
 test('chat handler completes the Gemini planner and answer flow', async () => {
   const originalGeminiKey = process.env.GEMINI_API_KEY;
   const originalGeminiModel = process.env.GEMINI_MODEL;

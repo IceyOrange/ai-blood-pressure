@@ -450,6 +450,12 @@ function normalizeAnswer(candidate, intent) {
   };
 }
 
+function hasUnsupportedDiagnosisOrCertainty(text) {
+  const negativePrefix = /(?:不|未|无|非|没|不能|不可|无法|并非|不代表|不足以)[^，,。！？；;:"{}\[\]]{0,12}$/;
+  return Array.from(String(text || '').matchAll(/已经确诊|可以确诊|诊断为|一定是|肯定是/g))
+    .some((match) => !negativePrefix.test(String(text).slice(Math.max(0, match.index - 18), match.index)));
+}
+
 function validateAnswer(answer, plan) {
   const violations = [];
   if (!answer?.title || !answer?.directAnswer) violations.push('missing_core_fields');
@@ -470,7 +476,7 @@ function validateAnswer(answer, plan) {
   if (intentKeywords[plan.intent] && !intentKeywords[plan.intent].test(directAnswer)) violations.push('intent_not_answered');
   const medicationText = combined.replace(/(不要|不能|不应|切勿|避免).{0,10}(自行|擅自|自己).{0,8}(停药|加药|减药|换药|调整)/g, '');
   if (/(自行|擅自|自己).{0,6}(停药|加药|减药|换药)|加倍服药/.test(medicationText)) violations.push('unsafe_medication_advice');
-  if (/(已经确诊|可以确诊|诊断为|一定是|肯定是)/.test(combined)) violations.push('unsupported_diagnosis_or_certainty');
+  if (hasUnsupportedDiagnosisOrCertainty(combined)) violations.push('unsupported_diagnosis_or_certainty');
   if (plan.intent === 'post_meal_bp' && !/(饭后|餐后|进食|吃完)/.test(directAnswer)) violations.push('meal_question_not_answered');
   if (plan.intent === 'post_meal_bp' && /^(近期|根据|从).{0,8}(记录|数据)/.test(directAnswer)) violations.push('context_before_direct_answer');
   if (plan.intent === 'medication' && !/(不要|不能|不应).{0,10}(自行|擅自).{0,8}(加药|减药|停药|换药|调整)/.test(combined)) violations.push('medication_boundary_missing');
