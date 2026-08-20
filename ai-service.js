@@ -25,6 +25,7 @@ export async function requestHealthAgent({ question, brief, history = [] }) {
     const requestError = new Error(payload.error || `AI proxy request failed: ${response.status}`);
     requestError.code = payload.code || 'AI_PROXY_FAILED';
     requestError.stage = payload.stage || '';
+    requestError.diagnostic = payload.diagnostic || null;
     requestError.status = response.status;
     throw requestError;
   }

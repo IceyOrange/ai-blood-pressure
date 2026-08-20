@@ -383,12 +383,30 @@ function renderAgentResponse(message) {
     </article>`;
   }
 
-  const sourceCopy = message.source === 'cloud'
-    ? { className: 'source-cloud', title: '专业 Agent 分析', detail: message.meta?.validation?.revisionAttempted ? 'AI 已完成规划、取数并自动复核修正' : 'AI 已完成问题规划、数据核对与安全校验' }
-    : { className: 'source-error', title: 'AI 本次未生成回答', detail: '未使用规则代答，可以直接重试' };
+  if (message.source === 'error') {
+    const stageLabels = { question_routing: '问题识别', tool_analysis: '数据核对', answer_generation: 'AI 回答生成', answer_revision: 'AI 回答复核' };
+    const failedStage = stageLabels[message.meta?.stage] || '';
+    return `<article class="assistant-answer source-error" data-message-id="${escapeHtml(message.id || '')}">
+      <div class="answer-heading"><span class="ai-symbol small">${icon('ai')}</span><div><strong>Gemini 服务状态</strong><small>本次未使用规则代答</small></div></div>
+      <div class="answer-content">
+        <section class="answer-service-error"><small>服务状态</small><h3>${escapeHtml(answer.title || 'Gemini 暂未生成回答')}</h3><p>${escapeHtml(answer.directAnswer || '请稍后重新请求。')}</p>${failedStage ? `<span>中断于：${escapeHtml(failedStage)}</span>` : ''}</section>
+        <button class="answer-retry" data-action="retry-ai" data-question="${escapeHtml(message.question || '')}">${icon('sync')}重新请求 AI</button>
+      </div>
+    </article>`;
+  }
+
+  const sourceCopy = {
+    className: 'source-cloud',
+    title: '专业 Agent 分析',
+    detail: message.meta?.validation?.revisionAttempted ? 'AI 已完成回答并自动复核修正' : '已完成个人证据核对与安全校验'
+  };
   const keyPoints = Array.isArray(answer.keyPoints) ? answer.keyPoints : [];
   const actions = Array.isArray(answer.actions) ? answer.actions : [];
   const followUps = Array.isArray(answer.followUps) ? answer.followUps : [];
+  const personalizationEvidence = Array.isArray(answer.personalization?.evidence)
+    ? answer.personalization.evidence.filter((item) => item && typeof item === 'object').slice(0, 3)
+    : [];
+  const personalizationSummary = typeof answer.personalization?.summary === 'string' ? answer.personalization.summary : '';
   const showProcess = message.source === 'cloud' && Array.isArray(message.meta?.stages);
   const isStreaming = Boolean(message.streaming);
   const displayedDirectAnswer = isStreaming ? message.streamedText || '' : answer.directAnswer || '';
@@ -398,7 +416,22 @@ function renderAgentResponse(message) {
     <div class="answer-content">
       ${showProcess ? '<div class="agent-process"><span>理解问题</span><b>→</b><span>核对数据</span><b>→</b><span>安全校验</span></div>' : ''}
       <div class="answer-summary"><small>先说结论</small><h3>${escapeHtml(answer.title || '健康提示')}</h3><p class="${isStreaming ? 'streaming-answer-text' : ''}" data-stream-text ${isStreaming ? 'aria-hidden="true"' : ''}>${escapeHtml(displayedDirectAnswer)}</p>${isStreaming ? `<span class="visually-hidden">${escapeHtml(answer.directAnswer || '')}</span>` : ''}</div>
-      ${message.source === 'error' ? `<button class="answer-retry" data-action="retry-ai" data-question="${escapeHtml(message.question || '')}">${icon('sync')}重新请求 AI</button>` : ''}
+      ${!isStreaming && personalizationEvidence.length ? `<section class="answer-personalization" aria-label="结合你的情况">
+        <div class="personalization-heading"><div><small>个性化分析</small><strong>结合你的情况</strong></div><span>${personalizationEvidence.length} 条依据</span></div>
+        ${personalizationSummary ? `<p class="personalization-summary">${escapeHtml(personalizationSummary)}</p>` : ''}
+        <div class="personal-evidence-list">${personalizationEvidence.map((item) => {
+          const confidence = item.confidence === 'high'
+            ? { className: 'high', label: '高可信' }
+            : item.confidence === 'medium'
+              ? { className: 'medium', label: '中可信' }
+              : { className: 'low', label: '参考线索' };
+          return `<article class="personal-evidence-item">
+            <div class="personal-evidence-heading"><strong>${escapeHtml(item.label || '个人记录')}</strong><span class="confidence-${confidence.className}">${confidence.label}</span></div>
+            <p class="personal-evidence-fact">${escapeHtml(item.fact || '')}</p>
+            <p class="personal-evidence-interpretation">${escapeHtml(item.interpretation || '')}</p>
+          </article>`;
+        }).join('')}</div>
+      </section>` : ''}
       ${isStreaming ? '<div class="answer-stream-wait"><i></i><span>结论呈现完成后，将展开分析依据和行动建议</span></div>' : ''}
       ${!isStreaming && keyPoints.length ? `<div class="answer-evidence">${keyPoints.map((item) => {
         const kind = answerKindMeta[item?.kind] ? item.kind : 'data';
@@ -683,7 +716,7 @@ async function submitQuestion(question) {
     const unavailableMessage = error.code === 'AI_TIMEOUT'
       ? 'AI 已收到问题，但本次生成超时。请点击下方按钮重新请求，这不代表 API Key 未配置。'
       : error.code === 'AI_RATE_LIMITED'
-        ? 'Gemini 当前请求较多或免费额度已达到限制，请稍等片刻后重新请求。'
+        ? 'Gemini 返回了 429，当前项目的模型调用配额暂不可用。这不是健康数据或个性化分析出错。请稍后重试；若持续出现，请检查 Google AI Studio 的 Rate limits 或 Billing。'
         : error.code === 'AI_RESPONSE_INVALID'
           ? 'AI 本次回答未通过质量校验，因此没有展示。请重新请求一次。'
           : error.code === 'AI_AUTH_FAILED'
@@ -698,9 +731,15 @@ async function submitQuestion(question) {
       role: 'assistant',
       source: 'error',
       question: trimmed,
+      meta: {
+        code: error.code || 'AI_PROXY_FAILED',
+        stage: error.stage || '',
+        diagnostic: error.diagnostic || null
+      },
       response: {
-        title: '这次没有生成 AI 回答',
+        title: 'Gemini 暂未生成回答',
         directAnswer: unavailableMessage,
+        personalization: { summary: '', evidence: [] },
         keyPoints: [],
         actions: [],
         caution: '',
@@ -709,6 +748,7 @@ async function submitQuestion(question) {
         confidence: 'low'
       }
     };
+    console.warn('Gemini request unavailable', state.chat[replyIndex].meta);
     state.chatBusy = false;
     renderApp();
     window.requestAnimationFrame(() => document.querySelector('#ask-ai')?.scrollIntoView({ behavior: 'smooth', block: 'end' }));

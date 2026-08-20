@@ -197,6 +197,20 @@ export function buildDoctorBrief(data) {
       : [],
     recommendations,
     questionPrompts: ['最近的血压趋势怎么样？', '饮食上我最该注意什么？', '睡眠会影响血压吗？'],
+    personalization: {
+      clinicalProfile: data.clinicalProfile || {},
+      device: data.device || {},
+      measurements: Array.isArray(data.measurements) ? data.measurements.slice(-28) : [],
+      medications: Array.isArray(data.medications) ? data.medications.slice(0, 10) : [],
+      medicationEvents: Array.isArray(data.medicationEvents) ? data.medicationEvents.slice(-30) : [],
+      symptomEvents: Array.isArray(data.symptomEvents) ? data.symptomEvents.slice(-20) : [],
+      diet: Array.isArray(data.diet) ? data.diet.slice(-14) : [],
+      sleep: Array.isArray(data.sleep) ? data.sleep.slice(-14) : [],
+      activity: Array.isArray(data.activity) ? data.activity.slice(-14) : [],
+      weightHistory: Array.isArray(data.weightHistory) ? data.weightHistory.slice(-12) : [],
+      labResults: Array.isArray(data.labResults) ? data.labResults.slice(-20) : [],
+      goals: data.goals || {}
+    },
     stats: {
       attentionReadings,
       highReadings,

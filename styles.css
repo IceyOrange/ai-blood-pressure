@@ -310,6 +310,11 @@ svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width:
 .agent-process { gap: 6px; margin: -2px 0 12px; color: var(--primary-dark); font-size: 12px; font-weight: 750; }
 .agent-process span { padding: 4px 7px; border-radius: 999px; background: var(--primary-soft); }
 .agent-process b { color: #94aaa5; font-weight: 600; }
+.answer-service-error { padding: 14px; color: #5d4932; border: 1px solid #ead8bf; border-radius: 15px; background: #fff9f0; }
+.answer-service-error > small { color: var(--orange); font-size: 13px; font-weight: 800; }
+.answer-service-error h3 { margin: 3px 0 7px; color: var(--ink); font-size: 19px; line-height: 1.42; }
+.answer-service-error p { margin: 0; font-size: 15px; line-height: 1.65; }
+.answer-service-error > span { display: inline-flex; margin-top: 9px; padding: 3px 8px; color: #7d6242; font-size: 12px; font-weight: 750; border-radius: 999px; background: #f8e9d3; }
 .answer-summary { padding: 14px; border-radius: 15px; background: #f1f7f5; }
 .answer-summary > small { color: var(--primary); font-size: 13px; font-weight: 800; }
 .answer-summary h3 { margin: 3px 0 7px; font-size: 19px; line-height: 1.42; }
@@ -320,7 +325,26 @@ svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width:
 .answer-stream-wait i { flex: 0 0 9px; width: 9px; height: 9px; border-radius: 50%; background: var(--primary); animation: thinking-pulse .9s ease-in-out infinite alternate; }
 .answer-retry { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 50px; margin-top: 11px; color: #fff; font-size: 16px; font-weight: 800; border-radius: 14px; background: var(--primary); }
 .answer-retry svg { width: 20px; height: 20px; }
-.assistant-answer:not(.is-streaming) .answer-evidence, .assistant-answer:not(.is-streaming) .answer-actions, .assistant-answer:not(.is-streaming) .answer-caution, .assistant-answer:not(.is-streaming) .answer-basis, .assistant-answer:not(.is-streaming) .answer-followups { animation: answer-reveal .24s ease-out both; }
+.assistant-answer:not(.is-streaming) .answer-personalization, .assistant-answer:not(.is-streaming) .answer-evidence, .assistant-answer:not(.is-streaming) .answer-actions, .assistant-answer:not(.is-streaming) .answer-caution, .assistant-answer:not(.is-streaming) .answer-basis, .assistant-answer:not(.is-streaming) .answer-followups { animation: answer-reveal .24s ease-out both; }
+.answer-personalization { margin-top: 11px; padding: 13px; border: 1px solid #cfe3de; border-radius: 15px; background: linear-gradient(180deg, #f3faf8 0%, #fbfdfc 100%); }
+.personalization-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.personalization-heading > div { display: grid; }
+.personalization-heading small { color: var(--primary); font-size: 12px; font-weight: 800; }
+.personalization-heading strong { font-size: 17px; line-height: 1.4; }
+.personalization-heading > span { flex: 0 0 auto; padding: 3px 8px; color: var(--primary-dark); font-size: 12px; font-weight: 750; border-radius: 999px; background: #e1f0ec; }
+.personalization-summary { margin: 8px 0 0; color: #40504c; font-size: 14px; line-height: 1.62; }
+.personal-evidence-list { display: grid; margin-top: 9px; border-top: 1px solid #dce9e6; }
+.personal-evidence-item { padding: 10px 0; }
+.personal-evidence-item + .personal-evidence-item { border-top: 1px solid #e2ece9; }
+.personal-evidence-item:last-child { padding-bottom: 1px; }
+.personal-evidence-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.personal-evidence-heading strong { min-width: 0; font-size: 14px; }
+.personal-evidence-heading span { flex: 0 0 auto; padding: 2px 7px; font-size: 11px; font-weight: 800; border-radius: 999px; }
+.personal-evidence-heading .confidence-high { color: #176b60; background: #dceee9; }
+.personal-evidence-heading .confidence-medium { color: #8a5b24; background: #faead2; }
+.personal-evidence-heading .confidence-low { color: #64716d; background: #e9eeec; }
+.personal-evidence-fact { margin: 5px 0 0; color: #273632; font-size: 14px; font-weight: 750; line-height: 1.58; }
+.personal-evidence-interpretation { margin: 3px 0 0; color: var(--muted); font-size: 13px; line-height: 1.55; }
 .answer-evidence { display: grid; gap: 9px; margin-top: 11px; }
 .answer-point { display: flex; align-items: flex-start; gap: 10px; padding: 12px; border: 1px solid #e2e9e7; border-radius: 14px; background: #fff; }
 .answer-point > span { display: grid; place-items: center; flex: 0 0 38px; width: 38px; height: 38px; color: var(--primary); border-radius: 11px; background: var(--primary-soft); }
